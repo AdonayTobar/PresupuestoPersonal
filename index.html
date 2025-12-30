@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinanzasPro - Gastos Planificados</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            padding-bottom: 100px;
+        }
+
+        .active-nav {
+            color: var(--primary);
+            position: relative;
+        }
+
+        .active-nav::after {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 4px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        .balance-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+
+        .modal-animate-in {
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        .planned-inactive {
+            opacity: 0.5;
+            filter: grayscale(1);
+        }
+
+        .planned-active {
+            opacity: 1;
+            filter: none;
+        }
+
+        /* Hide scrollbars */
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+    </style>
+</head>
+
+<body>
+
+    <main class="max-w-md mx-auto p-4 pt-8 space-y-6">
+
+        <!-- Balance Card -->
+        <section
+            class="balance-gradient rounded-[2.5rem] p-7 shadow-2xl shadow-blue-900/20 text-white overflow-hidden relative">
+            <div class="relative z-10">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-blue-200/70 text-[10px] font-bold uppercase tracking-widest">Saldo Real</p>
+                        <p id="header-period-label"
+                            class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">Quincena Actual
+                        </p>
+                    </div>
+                    <p id="header-date" class="text-[10px] font-bold text-blue-300/50 uppercase tracking-widest"></p>
+                </div>
+                <h2 id="total-balance" class="text-4xl font-extrabold mt-2">$0.00</h2>
+
+                <div class="grid grid-cols-2 gap-4 mt-8">
+                    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5">
+                        <div class="flex items-center gap-2 mb-1">
+                            <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Ingresos</p>
+                        </div>
+                        <p id="total-income" class="text-lg font-bold leading-none">$0.00</p>
+                    </div>
+                    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5">
+                        <div class="flex items-center gap-2 mb-1">
+                            <div class="w-2 h-2 rounded-full bg-rose-400"></div>
+                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Gastos Pagados
+                            </p>
+                        </div>
+                        <p id="total-expenses" class="text-lg font-bold leading-none">$0.00</p>
+                    </div>
+                </div>
+            </div>
+            <div class="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
+        </section>
+
+        <!-- View Content -->
+        <div id="view-container"></div>
+
+    </main>
+
+    <!-- Navigation -->
+    <nav
+        class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 px-2 pb-6 pt-3 z-50">
+        <div class="max-w-md mx-auto flex justify-between">
+            <button onclick="switchView('dashboard')" class="nav-btn flex flex-col items-center flex-1 transition-all"
+                data-view="dashboard">
+                <i class="fas fa-home-alt text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Inicio</span>
+            </button>
+            <button onclick="switchView('income')"
+                class="nav-btn flex flex-col items-center flex-1 transition-all text-slate-400" data-view="income">
+                <i class="fas fa-wallet text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Ingresos</span>
+            </button>
+            <button onclick="switchView('expenses')"
+                class="nav-btn flex flex-col items-center flex-1 transition-all text-slate-400" data-view="expenses">
+                <div
+                    class="bg-blue-600 text-white w-12 h-12 rounded-2xl flex items-center justify-center -mt-8 shadow-lg shadow-blue-200">
+                    <i class="fas fa-plus text-xl"></i>
+                </div>
+            </button>
+            <button onclick="switchView('reports')"
+                class="nav-btn flex flex-col items-center flex-1 transition-all text-slate-400" data-view="reports">
+                <i class="fas fa-chart-pie text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Resumen</span>
+            </button>
+            <button onclick="switchView('planned')"
+                class="nav-btn flex flex-col items-center flex-1 transition-all text-slate-400" data-view="planned">
+                <i class="fas fa-tasks text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Plan</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Modal System -->
+    <div id="modal-overlay"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden flex items-end sm:items-center justify-center">
+        <div id="modal-container"
+            class="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl modal-animate-in overflow-y-auto max-h-[90vh]">
+            <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <script>
+        const APP_ID = 'gastos_pro_v4';
+
+        // Estructura de Datos
+        let state = {
+            movements: JSON.parse(localStorage.getItem(`${APP_ID}_movements`)) || [],
+            plannedExpenses: JSON.parse(localStorage.getItem(`${APP_ID}_planned`)) || [],
+            // 'checkedStatus' guarda qué gastos fijos han sido pagados en un mes/quincena específico
+            // Estructura: { "2023-10-Q1": { "id_del_gasto": true } }
+            checkedStatus: JSON.parse(localStorage.getItem(`${APP_ID}_checked`)) || {},
+            currentView: 'dashboard',
+            viewMonth: new Date().getMonth(),
+            viewYear: new Date().getFullYear(),
+            viewQuincena: new Date().getDate() <= 15 ? 1 : 2
+        };
+
+        let dashboardQuincenaOffset = 0;
+        // 0 = actual | -1 = anterior | 1 = siguiente
+
+        function save() {
+            localStorage.setItem(`${APP_ID}_movements`, JSON.stringify(state.movements));
+            localStorage.setItem(`${APP_ID}_planned`, JSON.stringify(state.plannedExpenses));
+            localStorage.setItem(`${APP_ID}_checked`, JSON.stringify(state.checkedStatus));
+            updateHeader();
+        }
+
+        function formatCurrency(n) {
+            return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
+        }
+
+        function formatDateTimeLocal(dateStr) {
+            if (!dateStr) return { date: '', time: '' };
+
+            const [datePart, timePart] = dateStr.split('T');
+            const [year, month, day] = datePart.split('-');
+            const [hour, minute] = timePart.split(':');
+
+            return {
+                date: `${day}/${month}/${year}`,
+                time: `${hour}:${minute}`
+            };
+        }
+
+        function getNowLocalInput() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+
+
+        function getPeriodKey(year, month, q) {
+            return `${year}-${month}-Q${q}`;
+        }
+
+        function getDashboardPeriod() {
+            const now = new Date();
+            let year = now.getFullYear();
+            let month = now.getMonth();
+            let quincena = now.getDate() <= 15 ? 1 : 2;
+
+            if (dashboardQuincenaOffset === 1) {
+                if (quincena === 1) quincena = 2;
+                else { quincena = 1; month++; }
+            }
+
+            if (dashboardQuincenaOffset === -1) {
+                if (quincena === 2) quincena = 1;
+                else { quincena = 2; month--; }
+            }
+
+            if (month > 11) { month = 0; year++; }
+            if (month < 0) { month = 11; year--; }
+
+            return { year, month, quincena };
+        }
+
+
+        // --- QUINCENA ACTUAL ---
+        function getCurrentQuincena(date = new Date()) {
+            return date.getDate() <= 15 ? 'q1' : 'q2';
+        }
+
+        // --- FILTRAR GASTOS PLANIFICADOS POR QUINCENA ---
+        function filterPlannedByQuincena(plannedExpenses, quincena) {
+            return plannedExpenses.filter(p =>
+                p.recurrence === quincena || p.recurrence === 'both'
+            );
+        }
+
+        // --- OBTENER GASTOS PLANIFICADOS PARA LA VISTA ---
+        function getPlannedForHomeView(target = 'current') {
+            const quincena = target === 'current'
+                ? getCurrentQuincena()
+                : target;
+
+            return filterPlannedByQuincena(state.plannedExpenses, quincena);
+        }
+
+        function changeDashboardQuincena(v) {
+            dashboardQuincenaOffset += v;
+            if (dashboardQuincenaOffset > 1) dashboardQuincenaOffset = 1;
+            if (dashboardQuincenaOffset < -1) dashboardQuincenaOffset = -1;
+            switchView('dashboard');
+        }
+
+        function resetDashboardQuincena() {
+            dashboardQuincenaOffset = 0;
+            switchView('dashboard');
+        }
+
+
+
+        // Obtiene movimientos + planeados filtrados por quincena
+        function getMovementsForPeriod(month, year, quincena) {
+            const periodKey = getPeriodKey(year, month, quincena);
+            const status = state.checkedStatus[periodKey] || {};
+
+            // Movimientos manuales (Variables)
+            const manual = state.movements.filter(m => {
+                const d = new Date(m.date);
+                if (d.getMonth() !== month || d.getFullYear() !== year) return false;
+                if (quincena === 1) return d.getDate() <= 15;
+                if (quincena === 2) return d.getDate() >= 16;
+                return true;
+            });
+
+            // Gastos Planificados Proyectados
+            const planned = state.plannedExpenses.filter(p => {
+                if (quincena === 0) return true;
+                return p.recurrence === 'both' || p.recurrence === `q${quincena}`;
+            }).map(p => ({
+                ...p,
+                id: `p_${p.id}`,
+                realId: p.id,
+                date: `${year}-${String(month + 1).padStart(2, '0')}-${quincena === 2 ? '16' : '01'}T00:00`,
+                isPlanned: true,
+                isPaid: !!status[p.id],
+                paidAt: status[p.id]?.paidAt || null
+
+            }));
+
+            return [...manual, ...planned];
+        }
+
+        function updateHeader() {
+            const data = getMovementsForPeriod(state.viewMonth, state.viewYear, state.viewQuincena);
+            const inc = data.filter(m => m.isIncome).reduce((s, m) => s + m.amount, 0);
+            // Solo restan los gastos que NO son planeados, o los planeados que ya están PAGADOS
+            const exp = data.filter(m => !m.isIncome && (!m.isPlanned || m.isPaid)).reduce((s, m) => s + m.amount, 0);
+
+            document.getElementById('total-income').textContent = formatCurrency(inc);
+            document.getElementById('total-expenses').textContent = formatCurrency(exp);
+            document.getElementById('total-balance').textContent = formatCurrency(inc - exp);
+            document.getElementById('header-date').textContent = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            document.getElementById('header-period-label').textContent = state.viewQuincena === 0 ? 'Mes Completo' : `Quincena ${state.viewQuincena}`;
+        }
+
+        function switchView(view) {
+            state.currentView = view;
+            const container = document.getElementById('view-container');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active-nav', b.dataset.view === view));
+
+            switch (view) {
+                case 'dashboard': renderDashboard(container); break;
+                case 'income': renderIncome(container); break;
+                case 'expenses': renderExpenses(container); break;
+                case 'reports': renderReports(container); break;
+                case 'planned': renderPlannedSettings(container); break;
+            }
+        }
+
+        // --- COMPONENTS ---
+        function movementItem(m) {
+            const isPlanned = !!m.isPlanned;
+            const isPaid = m.isPaid;
+
+            return `
+                <div class="bg-white p-4 rounded-3xl flex items-center gap-4 border border-slate-100 ${isPlanned && !isPaid ? 'planned-inactive' : 'planned-active'} transition-all">
+                    <div onclick="${isPlanned ? `togglePaid('${m.realId}')` : `showDetail('${m.id}')`}" class="w-12 h-12 rounded-2xl flex items-center justify-center ${isPlanned ? (isPaid ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400') : (m.isIncome ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-50 text-slate-500')}">
+                        <i class="fas ${isPlanned ? (isPaid ? 'fa-check' : 'fa-clock') : (m.isIncome ? 'fa-arrow-up' : 'fa-receipt')}"></i>
+                    </div>
+                    <div class="flex-1" onclick="${isPlanned ? `openPlannedForm('${m.realId}')` : `showDetail('${m.id}')`}">
+                        <p class="text-sm font-bold text-slate-800 truncate">${m.name}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${isPlanned ? 'Gasto Planificado' : m.type}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-black 
+${m.isIncome
+                    ? 'text-emerald-500'
+                    : (!isPlanned || isPaid ? 'text-red-500' : 'text-slate-900')
+                }">${m.isIncome ? '+' : '-'}${formatCurrency(m.amount)}</p>
+                        <p class="text-[10px] font-bold text-slate-400">
+    ${formatDateTimeLocal(m.date).date}
+</p>
+
+                    </div>
+                </div>
+            `;
+        }
+
+        function togglePaid(realId) {
+            const key = getPeriodKey(state.viewYear, state.viewMonth, state.viewQuincena);
+            if (!state.checkedStatus[key]) state.checkedStatus[key] = {};
+
+            if (state.checkedStatus[key][realId]) {
+                // si ya estaba pagado, lo desmarca
+                delete state.checkedStatus[key][realId];
+            } else {
+                // guarda fecha y hora exacta de pago
+                state.checkedStatus[key][realId] = {
+                    paidAt: new Date().toLocaleString('sv-SE').slice(0, 16)
+                };
+            }
+
+            save();
+            switchView(state.currentView);
+        }
+
+
+        // --- VIEWS ---
+        function renderDashboard(container) {
+            const period = getDashboardPeriod();
+
+            const data = getMovementsForPeriod(
+                period.month,
+                period.year,
+                period.quincena
+            );
+
+            const sorted = data.sort((a, b) => b.date.localeCompare(a.date));
+
+
+            container.innerHTML = `
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-extrabold text-slate-800">
+                ${dashboardQuincenaOffset === 0
+                    ? 'Quincena Actual'
+                    : dashboardQuincenaOffset === 1
+                        ? 'Próxima Quincena'
+                        : 'Quincena Anterior'
+                }
+            </h3>
+            <div class="flex gap-2">
+                <button onclick="changeDashboardQuincena(-1)"
+                    class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-black">
+                    ‹
+                </button>
+                <button onclick="resetDashboardQuincena()"
+                    class="w-8 h-8 rounded-full bg-blue-600 text-white font-black">
+                    •
+                </button>
+                <button onclick="changeDashboardQuincena(1)"
+                    class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-black">
+                    ›
+                </button>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            ${sorted.length
+                    ? sorted.map(m => movementItem(m)).join('')
+                    : '<p class="text-center py-20 text-slate-300 font-bold">No hay movimientos</p>'
+                }
+        </div>
+    `;
+        }
+
+
+        function renderIncome(container) {
+            container.innerHTML = `
+                <h3 class="text-lg font-extrabold text-slate-800 mb-4">Ingresos</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="openForm('income', 'Sueldo')" class="bg-emerald-500 text-white p-6 rounded-[2.5rem] flex flex-col items-center gap-2 shadow-lg shadow-emerald-100">
+                        <i class="fas fa-university text-xl"></i>
+                        <span class="text-[10px] font-bold uppercase tracking-widest">Pago Quincena</span>
+                    </button>
+                    <button onclick="openForm('income', 'Extra')" class="bg-white border border-slate-100 p-6 rounded-[2.5rem] flex flex-col items-center gap-2">
+                        <i class="fas fa-plus text-emerald-500 text-xl"></i>
+                        <span class="text-[10px] font-bold uppercase tracking-widest">Ingreso Extra</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderExpenses(container) {
+            container.innerHTML = `
+                <h3 class="text-lg font-extrabold text-slate-800 mb-4">Gasto Variable</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="openForm('expense', 'Gasto General')" class="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex flex-col items-center gap-3">
+                        <div class="w-12 h-12 bg-blue-500 text-white rounded-2xl flex items-center justify-center"><i class="fas fa-shopping-bag"></i></div>
+                        <span class="text-[10px] font-bold text-slate-600 uppercase">Variable</span>
+                    </button>
+                    <button onclick="openForm('expense', 'Gasolina')" class="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex flex-col items-center gap-3">
+                        <div class="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center"><i class="fas fa-gas-pump"></i></div>
+                        <span class="text-[10px] font-bold text-slate-600 uppercase">Gasolina</span>
+                    </button>
+                </div>
+                <div class="mt-8">
+                    <p class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-widest text-center">Gestionar fijos</p>
+                    <button onclick="switchView('planned')" class="w-full bg-blue-50 text-blue-600 py-4 rounded-2xl font-black text-sm">
+                        Configurar Gastos Planificados
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderPlannedSettings(container) {
+            const q1 = state.plannedExpenses.filter(p => p.recurrence === 'q1' || p.recurrence === 'both');
+            const q2 = state.plannedExpenses.filter(p => p.recurrence === 'q2' || p.recurrence === 'both');
+
+            const renderItem = p => `
+                        <div onclick="openPlannedForm('${p.id}')" class="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-4">
+                            <div class="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-bold text-slate-800">${p.name}</p>
+                                <p class="text-[9px] font-bold text-blue-500 uppercase">
+                                    ${p.recurrence === 'both' ? 'Todas las Qnas' : `Solo Q${p.recurrence.slice(1)}`}
+                                </p>
+                            </div>
+                            <p class="font-black text-slate-900">${formatCurrency(p.amount)}</p>
+                        </div>
+                    `;
+
+            container.innerHTML = `
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-extrabold text-slate-800">Plan Mensual</h3>
+                            <button onclick="openPlannedForm()" class="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-bold uppercase">
+                                Nuevo Gasto Fijo
+                            </button>
+                        </div>
+
+                        <p class="text-xs text-slate-400 mb-6 italic">
+                            Aparecerán automáticamente cada quincena y se restan solo al darles chequecito.
+                        </p>
+
+                        <div class="space-y-6">
+
+                            <div>
+                                <p class="text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">Quincena 1</p>
+                                <div class="space-y-3">
+                                    ${q1.length ? q1.map(renderItem).join('') : '<p class="text-slate-300 text-sm">Sin gastos</p>'}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p class="text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">Quincena 2</p>
+                                <div class="space-y-3">
+                                    ${q2.length ? q2.map(renderItem).join('') : '<p class="text-slate-300 text-sm">Sin gastos</p>'}
+                                </div>
+                            </div>
+
+                        </div>
+                    `;
+        }
+
+
+        function renderReports(container) {
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white p-4 rounded-3xl flex items-center justify-between shadow-sm">
+                        <button onclick="changePeriod(-1)"><i class="fas fa-chevron-left"></i></button>
+                        <span class="font-black text-xs uppercase tracking-widest">${new Date(state.viewYear, state.viewMonth).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</span>
+                        <button onclick="changePeriod(1)"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                    <div class="flex gap-2 justify-center">
+                        ${[1, 2, 0].map(q => `
+                            <button onclick="setQ(${q})" class="px-6 py-2 rounded-full text-[10px] font-bold uppercase ${state.viewQuincena === q ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400'}">
+                                ${q === 0 ? 'Mes' : `Q${q}`}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div class="bg-white p-6 rounded-[2.5rem] shadow-sm"><canvas id="mainChart" class="max-h-[200px]"></canvas></div>
+                </div>
+            `;
+            setTimeout(initChart, 50);
+        }
+
+        function changePeriod(v) { state.viewMonth += v; if (state.viewMonth > 11) { state.viewMonth = 0; state.viewYear++ } if (state.viewMonth < 0) { state.viewMonth = 11; state.viewYear-- } updateHeader(); renderReports(document.getElementById('view-container')); }
+        function setQ(q) { state.viewQuincena = q; updateHeader(); renderReports(document.getElementById('view-container')); }
+
+        function initChart() {
+            const data = getMovementsForPeriod(state.viewMonth, state.viewYear, state.viewQuincena).filter(m => !m.isIncome && (!m.isPlanned || m.isPaid));
+            const cats = {};
+            data.forEach(m => { const l = m.isPlanned ? m.name : m.type; cats[l] = (cats[l] || 0) + m.amount; });
+            new Chart(document.getElementById('mainChart'), {
+                type: 'doughnut',
+                data: { labels: Object.keys(cats), datasets: [{ data: Object.values(cats), backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'], borderWidth: 0 }] },
+                options: { plugins: { legend: { display: false } }, cutout: '75%' }
+            });
+        }
+
+        // --- FORMS ---
+        function openForm(type, cat, editId = null) {
+            const m = editId ? state.movements.find(x => x.id === editId) : null;
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            content.innerHTML = `
+                <h2 class="text-xl font-extrabold mb-6">${m ? 'Editar' : 'Nuevo'} ${cat}</h2>
+                <div class="space-y-4">
+                    <input id="f-name" type="text" value="${m ? m.name : ''}" placeholder="Descripción" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold outline-none">
+                    <input id="f-amount" type="number" value="${m ? m.amount : ''}" placeholder="0.00" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-3xl font-black outline-none">
+                    <input id="f-date" type="datetime-local" value="${m ? m.date.slice(0, 16) : getNowLocalInput()}" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold outline-none">
+                    <div class="flex gap-2">
+                        ${m ? `<button onclick="deleteMov('${m.id}')" class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl"><i class="fas fa-trash"></i></button>` : ''}
+                        <button onclick="saveMov('${type}','${cat}','${editId || ''}')" class="flex-1 bg-slate-900 text-white font-black rounded-2xl py-4">Guardar</button>
+                    </div>
+                    <button onclick="closeModal()" class="w-full text-slate-400 text-xs font-bold py-2">Cancelar</button>
+                </div>
+            `;
+        }
+
+        function saveMov(type, cat, id) {
+            const name = document.getElementById('f-name').value;
+            const amount = parseFloat(document.getElementById('f-amount').value);
+            const date = document.getElementById('f-date').value;
+            if (!name || isNaN(amount)) return;
+            const data = {
+                id: id || Date.now().toString(),
+                name,
+                amount,
+                date: date, // guardar fecha y hora LOCAL
+                type: cat, isIncome: type === 'income'
+            };
+            if (id) { const idx = state.movements.findIndex(x => x.id === id); state.movements[idx] = data; }
+            else state.movements.push(data);
+            save(); closeModal(); switchView(state.currentView);
+        }
+
+        function openPlannedForm(id = null) {
+            const p = id ? state.plannedExpenses.find(x => x.id === id) : null;
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            content.innerHTML = `
+                <h2 class="text-xl font-extrabold mb-6">${p ? 'Editar' : 'Planificar'} Gasto</h2>
+                <div class="space-y-5">
+                    <input id="p-name" type="text" value="${p ? p.name : ''}" placeholder="Ej. Pago de Casa / Internet" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold outline-none">
+                    <input id="p-amount" type="number" value="${p ? p.amount : ''}" placeholder="0.00" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-2xl font-black outline-none">
+                    
+                    <div class="space-y-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aparecer automáticamente en:</p>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="selRecur('q1')" id="r-q1" class="r-btn p-3 rounded-xl border text-[10px] font-bold ${p?.recurrence === 'q1' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500'}">1ª QNA</button>
+                            <button onclick="selRecur('q2')" id="r-q2" class="r-btn p-3 rounded-xl border text-[10px] font-bold ${p?.recurrence === 'q2' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500'}">2ª QNA</button>
+                            <button onclick="selRecur('both')" id="r-both" class="r-btn p-3 rounded-xl border text-[10px] font-bold ${(!p || p.recurrence === 'both') ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500'}">AMBAS</button>
+                        </div>
+                        <input type="hidden" id="p-recur" value="${p ? p.recurrence : 'both'}">
+                    </div>
+
+                    <div class="flex gap-2">
+                        ${p ? `<button onclick="deletePlan('${p.id}')" class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl"><i class="fas fa-trash"></i></button>` : ''}
+                        <button onclick="savePlan('${id || ''}')" class="flex-1 bg-blue-600 text-white font-black rounded-2xl py-4 shadow-lg shadow-blue-100">Guardar Plan</button>
+                    </div>
+                    <button onclick="closeModal()" class="w-full text-slate-400 text-xs font-bold">Volver</button>
+                </div>
+            `;
+        }
+
+        function selRecur(v) {
+            document.querySelectorAll('.r-btn').forEach(b => { b.classList.remove('bg-blue-600', 'text-white', 'border-blue-600'); b.classList.add('bg-white', 'text-slate-500'); });
+            document.getElementById(`r-${v}`).classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+            document.getElementById('p-recur').value = v;
+        }
+
+        function savePlan(id) {
+            const name = document.getElementById('p-name').value;
+            const amount = parseFloat(document.getElementById('p-amount').value);
+            const recurrence = document.getElementById('p-recur').value;
+            if (!name || isNaN(amount)) return;
+            const data = { id: id || Date.now().toString(), name, amount, recurrence };
+            if (id) { const idx = state.plannedExpenses.findIndex(x => x.id === id); state.plannedExpenses[idx] = data; }
+            else state.plannedExpenses.push(data);
+            save(); closeModal(); switchView('planned');
+        }
+
+        function deleteMov(id) { state.movements = state.movements.filter(x => x.id !== id); save(); closeModal(); switchView(state.currentView); }
+        function deletePlan(id) { state.plannedExpenses = state.plannedExpenses.filter(x => x.id !== id); save(); closeModal(); switchView('planned'); }
+        function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+        function showDetail(id) {
+            const m = state.movements.find(x => x.id === id);
+            const dt = formatDateTimeLocal(m.date);
+
+            if (!m) return;
+
+
+
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+
+            content.innerHTML = `
+        <div class="text-center space-y-4">
+            <h2 class="text-2xl font-black">${m.name}</h2>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">${m.type}</p>
+
+            <p class="text-4xl font-black my-6 ${m.isIncome ? 'text-emerald-500' : 'text-red-500'}">
+                ${m.isIncome ? '+' : '-'}${formatCurrency(m.amount)}
+            </p>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
+    ${dt.date} · ${dt.time}
+</p>
+
+
+
+            <div class="flex gap-2 pt-4">
+                <button onclick="closeModal()" class="flex-1 bg-slate-100 text-slate-500 font-bold py-4 rounded-2xl">
+                    Cerrar
+                </button>
+                <button onclick="openForm('${m.isIncome ? 'income' : 'expense'}','${m.type}','${m.id}')"
+                    class="flex-1 bg-blue-600 text-white font-bold py-4 rounded-2xl">
+                    Editar
+                </button>
+            </div>
+        </div>
+    `;
+        }
+
+
+        window.onload = () => { updateHeader(); switchView('dashboard'); };
+    </script>
+</body>
+
+</html>
