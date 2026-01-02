@@ -100,20 +100,24 @@
                     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5">
                         <div class="flex items-center gap-2 mb-1">
                             <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Ingresos</p>
+                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Efectivo</p>
                         </div>
-                        <p id="total-income" class="text-lg font-bold leading-none">$0.00</p>
+                        <p id="total-cash" class="text-lg font-bold leading-none">$0.00</p>
                     </div>
                     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5">
                         <div class="flex items-center gap-2 mb-1">
-                            <div class="w-2 h-2 rounded-full bg-rose-400"></div>
-                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Gastos Pagados
-                            </p>
+                            <div class="w-2 h-2 rounded-full bg-sky-400"></div>
+                            <p class="text-[10px] text-blue-100/60 uppercase font-bold tracking-tighter">Tarjeta</p>
                         </div>
-                        <p id="total-expenses" class="text-lg font-bold leading-none">$0.00</p>
+                        <p id="total-card" class="text-lg font-bold leading-none">$0.00</p>
                     </div>
                 </div>
+
             </div>
+            <button onclick="openTransferForm()" class="w-full mt-4 bg-blue-600 text-white py-4 rounded-2xl font-black">
+                Transferir dinero
+            </button>
+
             <div class="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
         </section>
 
@@ -153,6 +157,7 @@
                 <i class="fas fa-tasks text-xl mb-1"></i>
                 <span class="text-[10px] font-bold uppercase tracking-tighter">Plan</span>
             </button>
+
         </div>
     </nav>
 
@@ -168,6 +173,16 @@
     <script>
         const APP_ID = 'gastos_pro_v4';
 
+        function getCustomQuincena(date) {
+            const d = new Date(date);
+            const day = d.getDate();
+
+            if (day === 31) return 1;
+            if (day >= 1 && day <= 14) return 1;
+            return 2;
+        }
+
+
         // Estructura de Datos
         let state = {
             movements: JSON.parse(localStorage.getItem(`${APP_ID}_movements`)) || [],
@@ -178,7 +193,8 @@
             currentView: 'dashboard',
             viewMonth: new Date().getMonth(),
             viewYear: new Date().getFullYear(),
-            viewQuincena: new Date().getDate() <= 15 ? 1 : 2
+            viewQuincena: getCustomQuincena(new Date())
+
         };
 
         let dashboardQuincenaOffset = 0;
@@ -194,6 +210,33 @@
         function formatCurrency(n) {
             return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
         }
+
+        function getBalances(data) {
+            let cash = 0;
+            let card = 0;
+
+            data.forEach(m => {
+                if (m.isTransfer) {
+                    if (m.from === 'cash') cash -= m.amount;
+                    if (m.from === 'card') card -= m.amount;
+                    if (m.to === 'cash') cash += m.amount;
+                    if (m.to === 'card') card += m.amount;
+                    return;
+                }
+
+                const sign = m.isIncome ? 1 : -1;
+                if (m.account === 'cash') cash += sign * m.amount;
+                if (m.account === 'card') card += sign * m.amount;
+            });
+
+            return { cash, card, total: cash + card };
+        }
+
+        function getAvailableBalances() {
+            return getBalances(state.movements);
+        }
+
+
 
         function formatDateTimeLocal(dateStr) {
             if (!dateStr) return { date: '', time: '' };
@@ -224,7 +267,8 @@
             const now = new Date();
             let year = now.getFullYear();
             let month = now.getMonth();
-            let quincena = now.getDate() <= 15 ? 1 : 2;
+            let quincena = getCustomQuincena(now);
+
 
             if (dashboardQuincenaOffset === 1) {
                 if (quincena === 1) quincena = 2;
@@ -242,11 +286,77 @@
             return { year, month, quincena };
         }
 
+        //Formulario de transferencia
+        function openTransferForm() {
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-overlay').classList.remove('hidden');
 
-        // --- QUINCENA ACTUAL ---
-        function getCurrentQuincena(date = new Date()) {
-            return date.getDate() <= 15 ? 'q1' : 'q2';
+            content.innerHTML = `
+        <h2 class="text-xl font-extrabold mb-6">Transferir dinero</h2>
+
+        <select id="t-from" class="w-full p-4 rounded-2xl bg-slate-50 font-bold">
+            <option value="cash">💵 Efectivo</option>
+            <option value="card">💳 Tarjeta</option>
+        </select>
+
+        <select id="t-to" class="w-full p-4 rounded-2xl bg-slate-50 font-bold mt-2">
+            <option value="card">💳 Tarjeta</option>
+            <option value="cash">💵 Efectivo</option>
+        </select>
+
+        <input id="t-amount" type="number" placeholder="Monto"
+            class="w-full p-4 rounded-2xl bg-slate-50 text-2xl font-black mt-4">
+
+        <button onclick="saveTransfer()"
+            class="w-full bg-purple-600 text-white py-4 rounded-2xl font-black mt-4">
+            Transferir
+        </button>
+
+        <button onclick="closeModal()" class="w-full text-slate-400 text-xs font-bold mt-2">
+            Cancelar
+        </button>
+    `;
         }
+
+        //Guardar transferecnia
+        function saveTransfer() {
+            const from = document.getElementById('t-from').value;
+            const to = document.getElementById('t-to').value;
+            const amount = parseFloat(document.getElementById('t-amount').value);
+
+            if (from === to || isNaN(amount) || amount <= 0) return;
+
+            state.movements.push({
+                id: Date.now().toString(),
+                name: 'Transferencia',
+                amount,
+                date: getNowLocalInput(),
+                isTransfer: true,
+                from,
+                to
+            });
+            if (from === to) {
+                alert('No puedes transferir a la misma cuenta');
+                return;
+            }
+
+            save();
+            closeModal();
+            switchView('dashboard');
+        }
+
+
+
+
+        function getPlannedForHomeView() {
+            const p = getDashboardPeriod();
+            const q = `q${p.quincena}`;
+
+            return state.plannedExpenses.filter(p =>
+                p.recurrence === q || p.recurrence === 'both'
+            );
+        }
+
 
         // --- FILTRAR GASTOS PLANIFICADOS POR QUINCENA ---
         function filterPlannedByQuincena(plannedExpenses, quincena) {
@@ -278,50 +388,66 @@
 
 
 
+
         // Obtiene movimientos + planeados filtrados por quincena
         function getMovementsForPeriod(month, year, quincena) {
             const periodKey = getPeriodKey(year, month, quincena);
             const status = state.checkedStatus[periodKey] || {};
 
-            // Movimientos manuales (Variables)
+            // 1️⃣ Movimientos reales
             const manual = state.movements.filter(m => {
+                // ❌ ocultar movimientos que vienen de gastos planificados
+                if (m.fromPlanned) return false;
+
                 const d = new Date(m.date);
                 if (d.getMonth() !== month || d.getFullYear() !== year) return false;
-                if (quincena === 1) return d.getDate() <= 15;
-                if (quincena === 2) return d.getDate() >= 16;
-                return true;
+                return getCustomQuincena(d) === quincena;
             });
 
-            // Gastos Planificados Proyectados
-            const planned = state.plannedExpenses.filter(p => {
-                if (quincena === 0) return true;
-                return p.recurrence === 'both' || p.recurrence === `q${quincena}`;
-            }).map(p => ({
-                ...p,
-                id: `p_${p.id}`,
-                realId: p.id,
-                date: `${year}-${String(month + 1).padStart(2, '0')}-${quincena === 2 ? '16' : '01'}T00:00`,
-                isPlanned: true,
-                isPaid: !!status[p.id],
-                paidAt: status[p.id]?.paidAt || null
 
-            }));
+            // 2️⃣ Gastos planificados (SIEMPRE visibles)
+            const planned = state.plannedExpenses
+                .filter(p =>
+                    p.recurrence === 'both' ||
+                    p.recurrence === `q${quincena}`
+                )
+                .map(p => ({
+                    ...p,
+                    id: `p_${p.id}`,
+                    realId: p.id,
+                    date: `${year}-${String(month + 1).padStart(2, '0')}-${quincena === 2 ? '16' : '01'}T00:00`,
+                    isPlanned: true,
+                    isPaid: !!status[p.id]
+                }));
 
             return [...manual, ...planned];
         }
 
-        function updateHeader() {
-            const data = getMovementsForPeriod(state.viewMonth, state.viewYear, state.viewQuincena);
-            const inc = data.filter(m => m.isIncome).reduce((s, m) => s + m.amount, 0);
-            // Solo restan los gastos que NO son planeados, o los planeados que ya están PAGADOS
-            const exp = data.filter(m => !m.isIncome && (!m.isPlanned || m.isPaid)).reduce((s, m) => s + m.amount, 0);
 
-            document.getElementById('total-income').textContent = formatCurrency(inc);
-            document.getElementById('total-expenses').textContent = formatCurrency(exp);
-            document.getElementById('total-balance').textContent = formatCurrency(inc - exp);
-            document.getElementById('header-date').textContent = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-            document.getElementById('header-period-label').textContent = state.viewQuincena === 0 ? 'Mes Completo' : `Quincena ${state.viewQuincena}`;
+        function updateHeader() {
+
+            // 🔑 EL BALANCE SIEMPRE SE CALCULA CON TODOS LOS MOVIMIENTOS REALES
+            const balances = getBalances(state.movements);
+
+            document.getElementById('total-cash').textContent =
+                formatCurrency(balances.cash);
+
+            document.getElementById('total-card').textContent =
+                formatCurrency(balances.card);
+
+            document.getElementById('total-balance').textContent =
+                formatCurrency(balances.total);
+
+            document.getElementById('header-date').textContent =
+                new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+            document.getElementById('header-period-label').textContent =
+                state.viewQuincena === 0
+                    ? 'Mes Completo'
+                    : `Quincena ${state.viewQuincena}`;
         }
+
+
 
         function switchView(view) {
             state.currentView = view;
@@ -343,46 +469,200 @@
             const isPaid = m.isPaid;
 
             return `
-                <div class="bg-white p-4 rounded-3xl flex items-center gap-4 border border-slate-100 ${isPlanned && !isPaid ? 'planned-inactive' : 'planned-active'} transition-all">
-                    <div onclick="${isPlanned ? `togglePaid('${m.realId}')` : `showDetail('${m.id}')`}" class="w-12 h-12 rounded-2xl flex items-center justify-center ${isPlanned ? (isPaid ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400') : (m.isIncome ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-50 text-slate-500')}">
-                        <i class="fas ${isPlanned ? (isPaid ? 'fa-check' : 'fa-clock') : (m.isIncome ? 'fa-arrow-up' : 'fa-receipt')}"></i>
-                    </div>
-                    <div class="flex-1" onclick="${isPlanned ? `openPlannedForm('${m.realId}')` : `showDetail('${m.id}')`}">
-                        <p class="text-sm font-bold text-slate-800 truncate">${m.name}</p>
-                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${isPlanned ? 'Gasto Planificado' : m.type}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm font-black 
-${m.isIncome
-                    ? 'text-emerald-500'
-                    : (!isPlanned || isPaid ? 'text-red-500' : 'text-slate-900')
-                }">${m.isIncome ? '+' : '-'}${formatCurrency(m.amount)}</p>
-                        <p class="text-[10px] font-bold text-slate-400">
-    ${formatDateTimeLocal(m.date).date}
-</p>
+        <div class="bg-white p-4 rounded-3xl flex items-center gap-4 border border-slate-100
+            ${isPlanned && !isPaid ? 'planned-inactive' : 'planned-active'}
+            transition-all">
 
-                    </div>
-                </div>
-            `;
+            <!-- ICONO -->
+            <div
+                onclick="${isPlanned
+                    ? (isPaid
+                        ? `showPlannedPaidDetail('${m.realId}')`
+                        : `togglePaid('${m.realId}')`)
+                    : `showDetail('${m.id}')`
+                }"
+                class="w-12 h-12 rounded-2xl flex items-center justify-center
+                    ${m.isTransfer
+                    ? 'bg-purple-50 text-purple-500'
+                    : isPlanned
+                        ? (isPaid
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-400')
+                        : (m.isIncome
+                            ? 'bg-emerald-50 text-emerald-500'
+                            : 'bg-slate-50 text-slate-500')
+                }">
+
+                <i class="fas
+                    ${m.isTransfer
+                    ? 'fa-right-left'
+                    : m.isIncome
+                        ? 'fa-arrow-up'
+                        : 'fa-receipt'
+                }"></i>
+            </div>
+
+            <!-- TEXTO -->
+            <div class="flex-1"
+                onclick="${isPlanned
+                    ? (isPaid
+                        ? `showPlannedPaidDetail('${m.realId}')`
+                        : `showPlannedDetail('${m.realId}', false)`)
+                    : `showDetail('${m.id}')`
+                }">
+
+                <p class="text-sm font-bold text-slate-800 truncate">
+                    ${m.name}
+                </p>
+
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                    ${isPlanned ? 'Gasto Planificado' : m.type}
+                </p>
+            </div>
+
+            <!-- MONTO + REVERTIR -->
+            <div class="text-right">
+                <p class="text-sm font-black
+                    ${m.isTransfer
+                    ? 'text-purple-500'
+                    : m.isIncome
+                        ? 'text-emerald-500'
+                        : (!isPlanned || isPaid
+                            ? 'text-red-500'
+                            : 'text-slate-900')
+                }">
+                    ${m.isTransfer ? '' : (m.isIncome ? '+' : '-')}
+                    ${formatCurrency(m.amount)}
+                </p>
+
+                <p class="text-[10px] font-bold text-slate-400">
+                    ${formatDateTimeLocal(m.date).date}
+                </p>
+
+                <!-- BOTÓN REVERTIR (COMO ANTES) -->
+                ${isPlanned && isPaid ? `
+                    <button
+                        onclick="togglePaid('${m.realId}')"
+                        class="mt-1 text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-[2px] rounded-full">
+                        Revertir
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `;
         }
+
+
+
+        function showPlannedPaidDetail(realId) {
+            const movement = state.movements.find(m => m.fromPlanned && m.plannedId === realId);
+            if (!movement) return;
+
+            showDetail(movement.id);
+        }
+
+
+
 
         function togglePaid(realId) {
-            const key = getPeriodKey(state.viewYear, state.viewMonth, state.viewQuincena);
+            const p = getDashboardPeriod();
+            const key = getPeriodKey(p.year, p.month, p.quincena);
+
             if (!state.checkedStatus[key]) state.checkedStatus[key] = {};
 
+            // 🔁 SI YA ESTABA PAGADO → REVERTIR
             if (state.checkedStatus[key][realId]) {
-                // si ya estaba pagado, lo desmarca
+
+                // ❗ eliminar el movimiento real asociado a este gasto planificado
+                state.movements = state.movements.filter(
+                    m => m.plannedId !== realId
+                );
+
+                // ❗ quitar el estado de pagado
                 delete state.checkedStatus[key][realId];
-            } else {
-                // guarda fecha y hora exacta de pago
-                state.checkedStatus[key][realId] = {
-                    paidAt: new Date().toLocaleString('sv-SE').slice(0, 16)
-                };
+
+                save();
+                switchView(state.currentView);
+                return;
             }
 
+            // ✅ SI NO ESTABA PAGADO → preguntar de dónde se paga
+            openPlannedPaymentModal(realId, key);
+        }
+
+
+        function openPlannedPaymentModal(realId, periodKey) {
+            const planned = state.plannedExpenses.find(p => p.id === realId);
+            if (!planned) return;
+
+            const balances = getAvailableBalances(); // 🔑 AQUÍ ESTÁ LA CLAVE
+
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+
+            content.innerHTML = `
+        <h2 class="text-xl font-extrabold mb-4">Pagar gasto planificado</h2>
+        <p class="text-sm text-slate-500 mb-6">
+            ¿Desde dónde se pagó <strong>${planned.name}</strong>?
+        </p>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button onclick="confirmPlannedPayment('${realId}','${periodKey}','cash')"
+                class="p-4 rounded-2xl bg-emerald-500 text-white font-black flex flex-col items-center">
+                💵 Efectivo
+                <span class="text-[10px] font-black opacity-80">
+                    ${formatCurrency(balances.cash)}
+                </span>
+            </button>
+
+            <button onclick="confirmPlannedPayment('${realId}','${periodKey}','card')"
+                class="p-4 rounded-2xl bg-sky-500 text-white font-black flex flex-col items-center">
+                💳 Tarjeta
+                <span class="text-[10px] font-black opacity-80">
+                    ${formatCurrency(balances.card)}
+                </span>
+            </button>
+        </div>
+
+        <button onclick="closeModal()" class="w-full text-slate-400 text-xs font-bold mt-4">
+            Cancelar
+        </button>
+    `;
+        }
+
+
+        function confirmPlannedPayment(realId, periodKey, account) {
+            const planned = state.plannedExpenses.find(p => p.id === realId);
+            if (!planned) return;
+
+            // 1️⃣ Marcar como pagado
+            state.checkedStatus[periodKey][realId] = {
+                paidAt: getNowLocalInput()
+            };
+
+            // 2️⃣ Crear movimiento REAL
+            state.movements.push({
+                id: Date.now().toString(),
+                name: planned.name,
+                amount: planned.amount,
+                date: getNowLocalInput(),
+                type: 'Gasto Planificado',
+                isIncome: false,
+                account,
+                isTransfer: false,
+
+                // 🔑 CLAVES IMPORTANTES
+                fromPlanned: true,
+                plannedId: realId
+            });
+
+
             save();
+            closeModal();
             switchView(state.currentView);
         }
+
+
 
 
         // --- VIEWS ---
@@ -475,6 +755,9 @@ ${m.isIncome
         function renderPlannedSettings(container) {
             const q1 = state.plannedExpenses.filter(p => p.recurrence === 'q1' || p.recurrence === 'both');
             const q2 = state.plannedExpenses.filter(p => p.recurrence === 'q2' || p.recurrence === 'both');
+            const totalQ1 = q1.reduce((sum, p) => sum + p.amount, 0);
+            const totalQ2 = q2.reduce((sum, p) => sum + p.amount, 0);
+
 
             const renderItem = p => `
                         <div onclick="openPlannedForm('${p.id}')" class="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-4">
@@ -510,6 +793,19 @@ ${m.isIncome
                                 <div class="space-y-3">
                                     ${q1.length ? q1.map(renderItem).join('') : '<p class="text-slate-300 text-sm">Sin gastos</p>'}
                                 </div>
+                                ${q1.length ? `
+                                <div class="flex justify-between items-center mt-3 px-2">
+                                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                        Total Quincena 1
+                                    </span>
+                                    <span class="text-sm font-black text-slate-900">
+                                        ${formatCurrency(totalQ1)}
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${q2.length ? `
+
+
                             </div>
 
                             <div>
@@ -517,6 +813,15 @@ ${m.isIncome
                                 <div class="space-y-3">
                                     ${q2.length ? q2.map(renderItem).join('') : '<p class="text-slate-300 text-sm">Sin gastos</p>'}
                                 </div>
+                                                                <div class="flex justify-between items-center mt-3 px-2">
+                                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                        Total Quincena 2
+                                    </span>
+                                    <span class="text-sm font-black text-slate-900">
+                                        ${formatCurrency(totalQ2)}
+                                    </span>
+                                </div>
+                            ` : ''}
                             </div>
 
                         </div>
@@ -559,6 +864,22 @@ ${m.isIncome
             });
         }
 
+        function setAccount(v) {
+            const balances = getAvailableBalances();
+
+            document.querySelectorAll('.acc-btn').forEach(b => {
+                b.classList.remove('bg-blue-600', 'text-white');
+                b.classList.add('bg-white', 'text-slate-500');
+            });
+
+            const btn = document.getElementById(`acc-${v}`);
+            btn.classList.add('bg-blue-600', 'text-white');
+
+            document.getElementById('f-account').value = v;
+        }
+
+
+
         // --- FORMS ---
         function openForm(type, cat, editId = null) {
             const m = editId ? state.movements.find(x => x.id === editId) : null;
@@ -569,6 +890,26 @@ ${m.isIncome
                 <div class="space-y-4">
                     <input id="f-name" type="text" value="${m ? m.name : ''}" placeholder="Descripción" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold outline-none">
                     <input id="f-amount" type="number" value="${m ? m.amount : ''}" placeholder="0.00" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-3xl font-black outline-none">
+                    <div class="grid grid-cols-2 gap-2">
+    <button onclick="setAccount('cash')" id="acc-cash"
+        class="acc-btn p-3 rounded-xl font-bold text-xs bg-blue-600 text-white flex flex-col">
+        💵 Efectivo
+        <span class="text-[10px] font-black opacity-80">
+            ${formatCurrency(getAvailableBalances().cash)}
+        </span>
+    </button>
+
+    <button onclick="setAccount('card')" id="acc-card"
+        class="acc-btn p-3 rounded-xl font-bold text-xs bg-white text-slate-500 flex flex-col">
+        💳 Tarjeta
+        <span class="text-[10px] font-black opacity-80">
+            ${formatCurrency(getAvailableBalances().card)}
+        </span>
+    </button>
+</div>
+
+<input type="hidden" id="f-account" value="${m?.account || 'cash'}">
+
                     <input id="f-date" type="datetime-local" value="${m ? m.date.slice(0, 16) : getNowLocalInput()}" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold outline-none">
                     <div class="flex gap-2">
                         ${m ? `<button onclick="deleteMov('${m.id}')" class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl"><i class="fas fa-trash"></i></button>` : ''}
@@ -584,16 +925,29 @@ ${m.isIncome
             const amount = parseFloat(document.getElementById('f-amount').value);
             const date = document.getElementById('f-date').value;
             if (!name || isNaN(amount)) return;
+            const account = document.getElementById('f-account').value;
+
             const data = {
                 id: id || Date.now().toString(),
                 name,
                 amount,
-                date: date, // guardar fecha y hora LOCAL
-                type: cat, isIncome: type === 'income'
+                date,
+                type: cat,
+                isIncome: type === 'income',
+                account,
+                isTransfer: false
             };
+
             if (id) { const idx = state.movements.findIndex(x => x.id === id); state.movements[idx] = data; }
             else state.movements.push(data);
             save(); closeModal(); switchView(state.currentView);
+
+            const balances = getAvailableBalances();
+            if (!data.isIncome && data.amount > balances[account]) {
+                alert('No tienes suficiente saldo en esta cuenta');
+                return;
+            }
+
         }
 
         function openPlannedForm(id = null) {
@@ -643,15 +997,42 @@ ${m.isIncome
         }
 
         function deleteMov(id) { state.movements = state.movements.filter(x => x.id !== id); save(); closeModal(); switchView(state.currentView); }
-        function deletePlan(id) { state.plannedExpenses = state.plannedExpenses.filter(x => x.id !== id); save(); closeModal(); switchView('planned'); }
+        function deletePlan(id) {
+
+            // 1️⃣ eliminar del plan
+            state.plannedExpenses = state.plannedExpenses.filter(p => p.id !== id);
+
+            // 2️⃣ eliminar cualquier estado "pagado" de ese gasto
+            Object.keys(state.checkedStatus).forEach(key => {
+                if (state.checkedStatus[key][id]) {
+                    delete state.checkedStatus[key][id];
+                }
+                // limpiar quincenas vacías
+                if (Object.keys(state.checkedStatus[key]).length === 0) {
+                    delete state.checkedStatus[key];
+                }
+            });
+
+            save();
+            closeModal();
+            switchView('dashboard'); // 👈 vuelve a la vista donde lo esperas ver
+        }
+
         function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
 
         function showDetail(id) {
             const m = state.movements.find(x => x.id === id);
-            const dt = formatDateTimeLocal(m.date);
-
             if (!m) return;
 
+            const dt = formatDateTimeLocal(m.date);
+
+            // 🟢 Método de pago
+            const methodLabel =
+                m.account === 'cash'
+                    ? 'Efectivo'
+                    : m.account === 'card'
+                        ? 'Tarjeta'
+                        : '—';
 
 
             const content = document.getElementById('modal-content');
@@ -660,21 +1041,31 @@ ${m.isIncome
             content.innerHTML = `
         <div class="text-center space-y-4">
             <h2 class="text-2xl font-black">${m.name}</h2>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">${m.type}</p>
+
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                ${m.type}
+            </p>
 
             <p class="text-4xl font-black my-6 ${m.isIncome ? 'text-emerald-500' : 'text-red-500'}">
                 ${m.isIncome ? '+' : '-'}${formatCurrency(m.amount)}
             </p>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
-    ${dt.date} · ${dt.time}
-</p>
 
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                ${dt.date} · ${dt.time}
+            </p>
 
+            <!-- MÉTODO DE PAGO -->
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Método de pago:
+                <span class="text-slate-800">${methodLabel}</span>
+            </p>
 
-            <div class="flex gap-2 pt-4">
-                <button onclick="closeModal()" class="flex-1 bg-slate-100 text-slate-500 font-bold py-4 rounded-2xl">
+            <div class="flex gap-2 pt-6">
+                <button onclick="closeModal()"
+                    class="flex-1 bg-slate-100 text-slate-500 font-bold py-4 rounded-2xl">
                     Cerrar
                 </button>
+
                 <button onclick="openForm('${m.isIncome ? 'income' : 'expense'}','${m.type}','${m.id}')"
                     class="flex-1 bg-blue-600 text-white font-bold py-4 rounded-2xl">
                     Editar
@@ -683,6 +1074,7 @@ ${m.isIncome
         </div>
     `;
         }
+
 
 
         window.onload = () => { updateHeader(); switchView('dashboard'); };
